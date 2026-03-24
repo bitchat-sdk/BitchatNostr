@@ -230,13 +230,6 @@ public final class GeoRelayDirectory {
             }
         }
 
-        // Try filesystem path (development/test)
-        if let cwd = FileManager.default.currentDirectoryPath as String?,
-           let data = try? Data(contentsOf: URL(fileURLWithPath: cwd).appendingPathComponent("relays/online_relays_gps.csv")),
-           let text = String(data: data, encoding: .utf8) {
-            return Self.parseCSV(text)
-        }
-
         SecureLogger.warning("GeoRelayDirectory: no local CSV found; entries empty", category: .session)
         return []
     }
