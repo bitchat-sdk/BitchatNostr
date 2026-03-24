@@ -1,4 +1,5 @@
 import Foundation
+import BitchatProtocol
 
 // MARK: - BitChat-over-Nostr Adapter
 

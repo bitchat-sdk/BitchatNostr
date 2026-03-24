@@ -1,5 +1,6 @@
 import Foundation
 import CryptoKit
+import BitchatProtocol
 
 /// Bridge between Noise and Nostr identities
 public final class NostrIdentityBridge {

@@ -1,4 +1,5 @@
 import BitLogger
+import BitchatProtocol
 import Foundation
 import Network
 import Combine
@@ -17,7 +18,7 @@ public final class NostrRelayManager: ObservableObject {
     }
     
     public struct Relay: Identifiable {
-        let id = UUID()
+        public let id = UUID()
         let url: String
         var isConnected: Bool = false
         var lastError: Error?
@@ -852,7 +853,7 @@ enum NostrRequest: Encodable {
     }
 }
 
-struct NostrFilter: Encodable {
+public struct NostrFilter: Encodable {
     var ids: [String]?
     var authors: [String]?
     var kinds: [Int]?
@@ -871,8 +872,8 @@ struct NostrFilter: Encodable {
     enum CodingKeys: String, CodingKey {
         case ids, authors, kinds, since, until, limit
     }
-    
-    func encode(to encoder: Encoder) throws {
+
+    public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: DynamicCodingKey.self)
         
         // Encode standard fields

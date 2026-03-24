@@ -1,4 +1,5 @@
 import BitLogger
+import BitchatProtocol
 import Foundation
 #if canImport(Tor)
 import Tor

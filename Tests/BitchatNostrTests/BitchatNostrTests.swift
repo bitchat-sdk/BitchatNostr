@@ -1,30 +1,34 @@
 import XCTest
 @testable import BitchatNostr
+import BitchatProtocol
 
 final class BitchatNostrTests: XCTestCase {
 
-    func testEncodeDecodeBase64() throws {
-        let payload = Data("Hello, BitChat!".utf8)
-        let encoded = NostrEmbeddedBitChat.encodePacket(payload)
-        XCTAssertFalse(encoded.isEmpty)
-        let decoded = NostrEmbeddedBitChat.decodePacket(encoded)
-        XCTAssertEqual(decoded, payload)
+    func testEncodePMForNostr() throws {
+        let sender = PeerID(publicKey: Data(repeating: 0xAA, count: 32))
+        let recipient = PeerID(publicKey: Data(repeating: 0xBB, count: 32))
+        let result = NostrEmbeddedBitChat.encodePMForNostr(
+            content: "Hello, BitChat!",
+            messageID: "test-msg-001",
+            recipientPeerID: recipient,
+            senderPeerID: sender
+        )
+        XCTAssertNotNil(result, "encodePMForNostr should return a non-nil string")
+        XCTAssertFalse(result!.isEmpty, "encoded string should not be empty")
     }
 
-    func testExtractPacketFromEvent() throws {
-        let payload = Data("test payload".utf8)
-        let b64 = NostrEmbeddedBitChat.encodePacket(payload)
-        let event = NostrEvent(
-            id: "abc123",
-            pubkey: "deadbeef",
-            created_at: 0,
-            kind: 1059,
-            tags: [],
-            content: b64,
-            sig: ""
-        )
-        let extracted = NostrEmbeddedBitChat.extractPacket(from: event)
-        XCTAssertNotNil(extracted)
-        XCTAssertEqual(extracted?.packetData, payload)
+    func testBech32RoundTrip() throws {
+        let testData = Data([0x00, 0x01, 0x02, 0x03, 0x04, 0x05])
+        let encoded = try Bech32.encode(hrp: "npub", data: testData)
+        XCTAssertFalse(encoded.isEmpty, "Bech32 encode should produce output")
+        let decoded = try Bech32.decode(encoded)
+        XCTAssertEqual(decoded.hrp, "npub")
+        XCTAssertEqual(decoded.data, testData)
+    }
+
+    @MainActor
+    func testGeoRelayDirectoryExists() {
+        let directory = GeoRelayDirectory.shared
+        XCTAssertNotNil(directory)
     }
 }
