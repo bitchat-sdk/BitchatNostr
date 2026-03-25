@@ -1,5 +1,9 @@
 # BitchatNostr
 
+[![Swift 5.9+](https://img.shields.io/badge/Swift-5.9%2B-orange)](https://swift.org)
+[![SPM Compatible](https://img.shields.io/badge/SPM-compatible-brightgreen)](https://github.com/bitchat-sdk/BitchatNostr)
+[![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org)
+
 Swift SPM package — BitChat-over-Nostr transport for iOS and macOS.
 
 Implements NIP-17 gift-wrap private messages, async relay client (NIP-01),
