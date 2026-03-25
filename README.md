@@ -1,6 +1,6 @@
 # BitchatNostr
 
-[![Swift 5.9+](https://img.shields.io/badge/Swift-5.9%2B-orange)](https://swift.org)
+[![Swift 6.0+](https://img.shields.io/badge/Swift-6.0%2B-orange)](https://swift.org)
 [![SPM Compatible](https://img.shields.io/badge/SPM-compatible-brightgreen)](https://github.com/bitchat-sdk/BitchatNostr)
 [![License: Unlicense](https://img.shields.io/badge/license-Unlicense-blue.svg)](https://unlicense.org)
 

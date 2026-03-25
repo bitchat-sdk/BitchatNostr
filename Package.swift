@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -26,12 +26,14 @@ let package = Package(
                 .product(name: "BitchatProtocol", package: "BitchatProtocol"),
                 .product(name: "P256K", package: "swift-secp256k1")
             ],
-            path: "Sources/BitchatNostr"
+            path: "Sources/BitchatNostr",
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
             name: "BitchatNostrTests",
             dependencies: ["BitchatNostr"],
-            path: "Tests/BitchatNostrTests"
+            path: "Tests/BitchatNostrTests",
+            swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]
 )
