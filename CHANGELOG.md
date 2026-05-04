@@ -2,6 +2,13 @@
 
 All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.1.1] — 2026-05-05
+
+### Changed
+- Internal: centralize string trimming via `StringProtocol.trimmed` / `trimmedOrNilIfEmpty` helpers (upstream iOS PR #1079). Refactor only — no public API or wire-format change.
+
 ## [0.1.0] — 2026-03-22
 
 Initial GA release.
@@ -37,6 +44,7 @@ Initial GA release.
 ### Protocol Compatibility
 Compatible with NIP-01, NIP-17, and BitChat geohash presence protocol.
 
+[0.1.1]: https://github.com/bitchat-sdk/BitchatNostr/compare/0.1.0...0.1.1
 [0.1.0]: https://github.com/bitchat-sdk/BitchatNostr/releases/tag/0.1.0
 
-[Unreleased]: https://github.com/bitchat-sdk/BitchatNostr/compare/0.1.0...HEAD
+[Unreleased]: https://github.com/bitchat-sdk/BitchatNostr/compare/0.1.1...HEAD
