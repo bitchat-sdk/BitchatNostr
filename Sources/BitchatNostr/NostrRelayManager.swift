@@ -51,6 +51,19 @@ public final class NostrRelayManager: ObservableObject {
     private var subscriptions: [String: Set<String>] = [:] // relay URL -> active subscription IDs
     private var pendingSubscriptions: [String: [String: String]] = [:] // relay URL -> (subscription id -> encoded REQ JSON)
     private var messageHandlers: [String: (NostrEvent) -> Void] = [:]
+    // Deduplicate inbound events per subscription: multiple relays serving the
+    // same subscription deliver the same event; only the first copy reaches the handler.
+    struct InboundEventKey: Hashable {
+        let subscriptionID: String
+        let eventID: String
+    }
+    private let recentInboundEventKeyLimit = TransportConfig.nostrInboundEventDedupCap
+    private let recentInboundEventKeyTrimTarget = TransportConfig.nostrInboundEventDedupTrimTarget
+    private var recentInboundEventKeys = Set<InboundEventKey>()
+    private var recentInboundEventKeyOrder: [InboundEventKey] = []
+    private var duplicateInboundEventDropCount = 0
+    private var duplicateInboundEventDropCountBySubscription: [String: Int] = [:]
+    private var inboundEventLogCount = 0
     // Coalesce duplicate subscribe requests for the same id within a short window
     private var subscribeCoalesce: [String: Date] = [:]
     private var cancellables = Set<AnyCancellable>()
@@ -209,10 +222,18 @@ public final class NostrRelayManager: ObservableObject {
             }
         }
         if !stillPending.isEmpty {
-            messageQueueLock.lock()
-            messageQueue.append(PendingSend(event: event, pendingRelays: stillPending))
-            messageQueueLock.unlock()
+            enqueuePendingSend(event, pendingRelays: stillPending)
         }
+    }
+
+    private func enqueuePendingSend(_ event: NostrEvent, pendingRelays: Set<String>) {
+        messageQueueLock.lock()
+        messageQueue.append(PendingSend(event: event, pendingRelays: pendingRelays))
+        let overflow = messageQueue.count - TransportConfig.nostrPendingSendQueueCap
+        if overflow > 0 {
+            messageQueue.removeFirst(overflow)
+        }
+        messageQueueLock.unlock()
     }
 
     /// Try to flush any queued messages for relays that are now connected.
@@ -405,6 +426,8 @@ public final class NostrRelayManager: ObservableObject {
     /// Unsubscribe from a subscription
     public func unsubscribe(id: String) {
         messageHandlers.removeValue(forKey: id)
+        removeRecentInboundEvents(forSubscriptionID: id)
+        duplicateInboundEventDropCountBySubscription.removeValue(forKey: id)
         // Allow immediate re-subscription by clearing coalescer timestamp
         subscribeCoalesce.removeValue(forKey: id)
         
@@ -547,11 +570,25 @@ public final class NostrRelayManager: ObservableObject {
     private func handleParsedMessage(_ parsed: ParsedInbound, from relayUrl: String) {
         switch parsed {
         case .event(let subId, let event):
-            if event.kind != 1059 {
-                SecureLogger.debug("📥 Event kind=\(event.kind) id=\(event.id.prefix(16))… relay=\(relayUrl)", category: .session)
-            }
             if let index = self.relays.firstIndex(where: { $0.url == relayUrl }) {
                 self.relays[index].messagesReceived += 1
+            }
+            guard event.isValidSignature() else {
+                SecureLogger.warning(
+                    "⚠️ Dropped invalid Nostr event id=\(event.id.prefix(16))… sub=\(subId) relay=\(relayUrl)",
+                    category: .session
+                )
+                return
+            }
+            guard shouldDeliverInboundEvent(subscriptionID: subId, eventID: event.id) else {
+                return
+            }
+            if event.kind != 1059 {
+                // Per-event logging floods dev builds in busy geohashes; sample it.
+                inboundEventLogCount += 1
+                if inboundEventLogCount == 1 || inboundEventLogCount.isMultiple(of: TransportConfig.nostrInboundEventLogInterval) {
+                    SecureLogger.debug("📥 Event #\(inboundEventLogCount) kind=\(event.kind) id=\(event.id.prefix(16))… relay=\(relayUrl)", category: .session)
+                }
             }
             if let handler = self.messageHandlers[subId] {
                 handler(event)
@@ -586,6 +623,69 @@ public final class NostrRelayManager: ObservableObject {
         }
     }
     
+    /// Returns true the first time an event is seen for a subscription; later
+    /// copies (fan-in from other relays) are dropped and counted.
+    func shouldDeliverInboundEvent(subscriptionID: String, eventID: String) -> Bool {
+        guard !eventID.isEmpty else { return true }
+        let key = InboundEventKey(subscriptionID: subscriptionID, eventID: eventID)
+        guard recentInboundEventKeys.insert(key).inserted else {
+            recordDuplicateInboundEventDrop(subscriptionID: subscriptionID)
+            return false
+        }
+        recentInboundEventKeyOrder.append(key)
+
+        if recentInboundEventKeyOrder.count > recentInboundEventKeyLimit {
+            let removeCount = recentInboundEventKeyOrder.count - recentInboundEventKeyTrimTarget
+            for staleKey in recentInboundEventKeyOrder.prefix(removeCount) {
+                recentInboundEventKeys.remove(staleKey)
+            }
+            recentInboundEventKeyOrder.removeFirst(removeCount)
+        }
+        return true
+    }
+
+    private func recordDuplicateInboundEventDrop(subscriptionID: String) {
+        duplicateInboundEventDropCount += 1
+        let subscriptionCount = (duplicateInboundEventDropCountBySubscription[subscriptionID] ?? 0) + 1
+        duplicateInboundEventDropCountBySubscription[subscriptionID] = subscriptionCount
+
+        if duplicateInboundEventDropCount == 1 ||
+            duplicateInboundEventDropCount.isMultiple(of: TransportConfig.nostrDuplicateEventLogInterval) {
+            SecureLogger.debug(
+                "Dropped duplicate Nostr event deliveries total=\(duplicateInboundEventDropCount) sub=\(subscriptionID) sub_total=\(subscriptionCount)",
+                category: .session
+            )
+        }
+    }
+
+    private func removeRecentInboundEvents(forSubscriptionID subscriptionID: String) {
+        guard !recentInboundEventKeyOrder.isEmpty else { return }
+        var retainedKeys: [InboundEventKey] = []
+        retainedKeys.reserveCapacity(recentInboundEventKeyOrder.count)
+        for key in recentInboundEventKeyOrder {
+            if key.subscriptionID == subscriptionID {
+                recentInboundEventKeys.remove(key)
+            } else {
+                retainedKeys.append(key)
+            }
+        }
+        recentInboundEventKeyOrder = retainedKeys
+    }
+
+    var debugDuplicateInboundEventDropCount: Int {
+        duplicateInboundEventDropCount
+    }
+
+    func debugDuplicateInboundEventDropCount(forSubscriptionID subscriptionID: String) -> Int {
+        duplicateInboundEventDropCountBySubscription[subscriptionID] ?? 0
+    }
+
+    var debugPendingMessageQueueCount: Int {
+        messageQueueLock.lock()
+        defer { messageQueueLock.unlock() }
+        return messageQueue.count
+    }
+
     private func sendToRelay(event: NostrEvent, connection: URLSessionWebSocketTask, relayUrl: String) {
         let req = NostrRequest.event(event)
         
@@ -781,8 +881,9 @@ private enum ParsedInbound {
             if array.count >= 3,
                let subId = array[1] as? String,
                let eventDict = array[2] as? [String: Any],
-               let event = try? NostrEvent(from: eventDict),
-               event.isValidSignature() {
+               let event = try? NostrEvent(from: eventDict) {
+                // Signature verification happens at delivery (handleParsedMessage)
+                // so invalid events are logged and cannot poison the dedup cache.
                 self = .event(subId: subId, event: event)
                 return
             }

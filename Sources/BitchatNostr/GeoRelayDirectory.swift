@@ -40,6 +40,11 @@ public final class GeoRelayDirectory {
         prefetchIfNeeded()
     }
 
+    /// Test seam: build a directory with fixed entries (no cache, network, or timers).
+    init(entries: [Entry]) {
+        self.entries = entries
+    }
+
     deinit {
         observers.forEach { NotificationCenter.default.removeObserver($0) }
         refreshTimer?.invalidate()
@@ -53,33 +58,16 @@ public final class GeoRelayDirectory {
     }
 
     /// Returns up to `count` relay URLs (wss://) closest to the given coordinate.
+    /// Ties break by host so every device with the same directory picks the
+    /// same relay set — publishers and subscribers must agree on relays.
     public func closestRelays(toLat lat: Double, lon: Double, count: Int = 5) -> [String] {
         guard !entries.isEmpty, count > 0 else { return [] }
 
-        if entries.count <= count {
-            return entries
-                .sorted { a, b in
-                    haversineKm(lat, lon, a.lat, a.lon) < haversineKm(lat, lon, b.lat, b.lon)
-                }
-                .map { "wss://\($0.host)" }
-        }
-
-        var best: [(entry: Entry, distance: Double)] = []
-        best.reserveCapacity(count)
-
-        for entry in entries {
-            let distance = haversineKm(lat, lon, entry.lat, entry.lon)
-            if best.count < count {
-                let idx = best.firstIndex { $0.distance > distance } ?? best.count
-                best.insert((entry, distance), at: idx)
-            } else if let worstDistance = best.last?.distance, distance < worstDistance {
-                let idx = best.firstIndex { $0.distance > distance } ?? best.count
-                best.insert((entry, distance), at: idx)
-                best.removeLast()
-            }
-        }
-
-        return best.map { "wss://\($0.entry.host)" }
+        return entries
+            .map { (entry: $0, distance: haversineKm(lat, lon, $0.lat, $0.lon)) }
+            .sorted { ($0.distance, $0.entry.host) < ($1.distance, $1.entry.host) }
+            .prefix(count)
+            .map { "wss://\($0.entry.host)" }
     }
 
     // MARK: - Remote Fetch

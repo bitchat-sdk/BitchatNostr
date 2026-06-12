@@ -4,6 +4,16 @@ All notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+- `NostrRelayManager` now deduplicates inbound events per subscription: when multiple relays serve the same subscription, only the first copy of an event reaches the handler. Duplicate drops are counted and surfaced via `debugDuplicateInboundEventDropCount` (upstream iOS PR #1331).
+- Signature verification moved from the inbound parser to the delivery path, so invalid events are logged (and counted in relay stats) instead of silently discarded, and cannot poison the dedup cache (upstream iOS PR #1331).
+- The pending-send queue is now capped at `TransportConfig.nostrPendingSendQueueCap` (200); the oldest queued sends are dropped on overflow (upstream iOS PR #1331).
+- Per-event inbound debug logging is now sampled (every 100th event) instead of logged per event (upstream iOS PR #1332).
+- `GeoRelayDirectory.closestRelays` now breaks distance ties by host, so every device with the same directory picks the same relay set — publishers and subscribers must agree on relays (upstream iOS PR #1333).
+
+### Notes
+- Requires BitchatProtocol > 0.1.1 (new `TransportConfig` constants). Release BitchatProtocol first, per the usual protocol-core → nostr order.
+
 ## [0.1.1] — 2026-05-05
 
 ### Changed
