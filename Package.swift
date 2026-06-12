@@ -15,7 +15,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/bitchat-sdk/BitLogger.git", from: "0.1.0"),
-        .package(url: "https://github.com/bitchat-sdk/BitchatProtocol.git", from: "0.1.0"),
+        .package(url: "https://github.com/bitchat-sdk/BitchatProtocol.git", from: "0.1.2"),
         .package(url: "https://github.com/21-DOT-DEV/swift-secp256k1", exact: "0.21.1")
     ],
     targets: [
